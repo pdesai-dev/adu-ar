@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ADU AR Model Viewer</title>
+
+  <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+
+    /* Model Selection Screen */
+    #selection-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    #selection-screen.hidden {
+      display: none;
+    }
+
+    .title {
+      color: white;
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    .subtitle {
+      color: rgba(255,255,255,0.8);
+      font-size: 16px;
+      margin-bottom: 40px;
+      text-align: center;
+    }
+
+    .model-list {
+      background: white;
+      border-radius: 16px;
+      padding: 20px;
+      width: 100%;
+      max-width: 500px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+
+    .model-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      margin: 8px 0;
+      background: #f8f9fa;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .model-item:hover {
+      background: #e9ecef;
+      transform: translateX(4px);
+    }
+
+    .model-item:active {
+      transform: scale(0.98);
+    }
+
+    .model-name {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .model-arrow {
+      color: #667eea;
+      font-size: 24px;
+    }
+
+    /* Viewer Screen */
+    #viewer-screen {
+      display: none;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    #viewer-screen.active {
+      display: flex;
+    }
+
+    .viewer-header {
+      background: rgba(0,0,0,0.8);
+      color: white;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .back-btn {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .back-btn:active {
+      background: rgba(255,255,255,0.3);
+    }
+
+    .model-title {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    model-viewer {
+      flex: 1;
+      width: 100%;
+      background: #f0f0f0;
+    }
+
+    .viewer-controls {
+      background: white;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .control-hint {
+      color: #666;
+      font-size: 14px;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .ar-button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 16px 32px;
+      border-radius: 12px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+      transition: all 0.3s ease;
+    }
+
+    .ar-button:active {
+      transform: scale(0.98);
+    }
+
+    .ar-button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .loading-indicator {
+      text-align: center;
+      color: #666;
+      font-size: 14px;
+      padding: 10px;
+    }
+
+    /* AR Screen */
+    #ar-screen {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1000;
+    }
+
+    #ar-screen.active {
+      display: block;
+    }
+
+    #ar-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .ar-info {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.8);
+      color: white;
+      padding: 16px 24px;
+      border-radius: 12px;
+      font-size: 16px;
+      text-align: center;
+      max-width: 90%;
+      z-index: 10;
+    }
+
+    .ar-close {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(0,0,0,0.8);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      z-index: 10;
+    }
+
+    .reticle-indicator {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 60px;
+      height: 60px;
+      border: 3px solid #00ff00;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 5;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .reticle-indicator.visible {
+      opacity: 1;
+    }
+
+    .reticle-indicator::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 6px;
+      height: 6px;
+      background: #00ff00;
+      border-radius: 50%;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Model Selection Screen -->
+  <div id="selection-screen">
+    <h1 class="title">ADU AR Viewer</h1>
+    <p class="subtitle">Select a model to view</p>
+
+    <div class="model-list" id="model-list">
+      <!-- Models will be populated here -->
+    </div>
+  </div>
+
+  <!-- 3D Viewer Screen -->
+  <div id="viewer-screen">
+    <div class="viewer-header">
+      <button class="back-btn" id="back-btn">← Back</button>
+      <div class="model-title" id="model-title">Model</div>
+      <div style="width: 60px;"></div>
+    </div>
+
+    <model-viewer
+      id="model-viewer"
+      alt="3D Model"
+      camera-controls
+      auto-rotate
+      shadow-intensity="1"
+      exposure="1"
+      environment-image="neutral"
+      touch-action="pan-y">
+    </model-viewer>
+
+    <div class="viewer-controls">
+      <div class="control-hint">
+        Drag to rotate • Pinch to zoom • Two fingers to pan
+      </div>
+      <button class="ar-button" id="ar-btn">View in AR</button>
+    </div>
+  </div>
+
+  <!-- AR Screen -->
+  <div id="ar-screen">
+    <canvas id="ar-canvas"></canvas>
+    <div class="ar-info" id="ar-info">
+      Initializing AR...
+    </div>
+    <button class="ar-close" id="ar-close-btn">Exit AR</button>
+    <div class="reticle-indicator" id="reticle-indicator"></div>
+  </div>
+
+  <script type="module">
+    // Global error handler
+    window.addEventListener('error', (e) => {
+      console.error('Global error:', e.error);
+    });
+
+    window.addEventListener('unhandledrejection', (e) => {
+      console.error('Unhandled promise rejection:', e.reason);
+    });
+
+    // App State
+    let currentModel = null;
+    let availableModels = [];
+
+    // AR Variables (Three.js will be loaded dynamically when needed)
+    let THREE = null;
+    let GLTFLoader = null;
+    let arCamera, arScene, arRenderer;
+    let reticle, modelClone;
+    let hitTestSource = null;
+    let hitTestSourceRequested = false;
+    let arSession = null;
+    let modelPlaced = false;
+
+    // Get DOM elements
+    const selectionScreen = document.getElementById('selection-screen');
+    const viewerScreen = document.getElementById('viewer-screen');
+    const arScreen = document.getElementById('ar-screen');
+    const modelList = document.getElementById('model-list');
+    const modelViewer = document.getElementById('model-viewer');
+    const backBtn = document.getElementById('back-btn');
+    const arBtn = document.getElementById('ar-btn');
+    const arCloseBtn = document.getElementById('ar-close-btn');
+    const arInfo = document.getElementById('ar-info');
+    const reticleIndicator = document.getElementById('reticle-indicator');
+
+    // Scan for GLB models in directory
+    async function scanForModels() {
+      console.log('scanForModels() called');
+      const models = [
+        { name: 'Model 1', file: 'model1.glb' }
+      ];
+
+      console.log('Models:', models);
+      availableModels = models;
+      displayModelList();
+    }
+
+    // Display model list
+    function displayModelList() {
+      console.log('displayModelList() called');
+      console.log('modelList element:', modelList);
+      console.log('availableModels:', availableModels);
+
+      if (!modelList) {
+        console.error('modelList element not found!');
+        return;
+      }
+
+      modelList.innerHTML = '';
+      availableModels.forEach(model => {
+        console.log('Creating item for:', model.name);
+        const item = document.createElement('div');
+        item.className = 'model-item';
+        item.innerHTML = `
+          <span class="model-name">${model.name}</span>
+          <span class="model-arrow">→</span>
+        `;
+        item.onclick = () => loadModel(model);
+        modelList.appendChild(item);
+      });
+      console.log('Model list populated with', availableModels.length, 'items');
+    }
+
+    // Load selected model
+    function loadModel(model) {
+      currentModel = model;
+      document.getElementById('model-title').textContent = model.name;
+      modelViewer.setAttribute('src', model.file);
+
+      selectionScreen.classList.add('hidden');
+      viewerScreen.classList.add('active');
+
+      // Check AR support when model is loaded
+      checkARSupport();
+
+      // Add load event listener
+      modelViewer.addEventListener('load', () => {
+        console.log('Model loaded successfully');
+      });
+
+      modelViewer.addEventListener('error', (event) => {
+        console.error('Error loading model:', event);
+        alert('Failed to load model. Please check the file.');
+      });
+    }
+
+    // Go back to selection
+    backBtn.onclick = () => {
+      viewerScreen.classList.remove('active');
+      selectionScreen.classList.remove('hidden');
+      modelViewer.removeAttribute('src');
+    };
+
+    // Check AR support on load
+    async function checkARSupport() {
+      if ('xr' in navigator) {
+        try {
+          const supported = await navigator.xr.isSessionSupported('immersive-ar');
+          if (!supported) {
+            arBtn.disabled = true;
+            arBtn.textContent = 'AR Not Supported';
+          }
+        } catch (err) {
+          console.error('AR check failed:', err);
+          arBtn.disabled = true;
+          arBtn.textContent = 'AR Not Available';
+        }
+      } else {
+        arBtn.disabled = true;
+        arBtn.textContent = 'WebXR Not Supported';
+      }
+    }
+
+    // Start AR Experience
+    arBtn.onclick = async () => {
+      if (arBtn.disabled) return;
+
+      if (!currentModel) {
+        alert('Please wait for the model to load');
+        return;
+      }
+
+      // Disable button during initialization
+      arBtn.disabled = true;
+      arBtn.textContent = 'Starting AR...';
+
+      try {
+        await startARSession();
+      } catch (err) {
+        console.error('Failed to start AR:', err);
+        alert('Failed to start AR: ' + err.message);
+        arBtn.disabled = false;
+        arBtn.textContent = 'View in AR';
+      }
+    };
+
+    // Initialize AR Session
+    async function startARSession() {
+      arScreen.classList.add('active');
+      await initAR();
+    }
+
+    // Initialize AR with Three.js
+    async function initAR() {
+      // Load Three.js dynamically when entering AR mode
+      if (!THREE) {
+        console.log('Loading Three.js for AR...');
+        const threeModule = await import("https://unpkg.com/three@0.158.0/build/three.module.js");
+        THREE = threeModule;
+        const loaderModule = await import("https://unpkg.com/three@0.158.0/examples/jsm/loaders/GLTFLoader.js");
+        GLTFLoader = loaderModule.GLTFLoader;
+        console.log('Three.js loaded for AR');
+      }
+
+      arScene = new THREE.Scene();
+      arCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 50);
+
+      arRenderer = new THREE.WebGLRenderer({
+        canvas: document.getElementById('ar-canvas'),
+        antialias: true,
+        alpha: true
+      });
+      arRenderer.setSize(window.innerWidth, window.innerHeight);
+      arRenderer.xr.enabled = true;
+
+      // Lighting
+      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+      arScene.add(light);
+
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+      directionalLight.position.set(0, 10, 10);
+      arScene.add(directionalLight);
+
+      // Create reticle (floor indicator)
+      reticle = new THREE.Mesh(
+        new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+      );
+      reticle.matrixAutoUpdate = false;
+      reticle.visible = false;
+      arScene.add(reticle);
+
+      // Load model for AR
+      const loader = new GLTFLoader();
+      await new Promise((resolve, reject) => {
+        loader.load(
+          currentModel.file,
+          function(gltf) {
+            modelClone = gltf.scene;
+            // Scale model appropriately
+            const box = new THREE.Box3().setFromObject(modelClone);
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const scale = 2 / maxDim; // Scale to roughly 2 meters
+            modelClone.scale.multiplyScalar(scale);
+            resolve();
+          },
+          undefined,
+          function(error) {
+            reject(error);
+          }
+        );
+      });
+
+      // Start AR session
+      await startXRSession();
+    }
+
+    async function startXRSession() {
+      try {
+        arSession = await navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['hit-test'],
+          optionalFeatures: ['dom-overlay'],
+          domOverlay: { root: arScreen }
+        });
+
+        await arRenderer.xr.setSession(arSession);
+
+        arSession.addEventListener('end', onARSessionEnd);
+
+        arInfo.textContent = 'Slowly scan the floor by moving your device';
+
+        arRenderer.setAnimationLoop(renderAR);
+      } catch (err) {
+        console.error('Failed to start AR session:', err);
+        arInfo.textContent = 'Failed to start AR: ' + err.message;
+        arScreen.classList.remove('active');
+        arBtn.disabled = false;
+        arBtn.textContent = 'View in AR';
+        throw err;
+      }
+    }
+
+    function renderAR(timestamp, frame) {
+      if (!frame || !arRenderer) return;
+
+      const referenceSpace = arRenderer.xr.getReferenceSpace();
+      const session = arRenderer.xr.getSession();
+
+      if (!referenceSpace || !session) return;
+
+      // Setup hit testing
+      if (!hitTestSourceRequested) {
+        session.requestReferenceSpace('viewer').then(function (viewerSpace) {
+          session.requestHitTestSource({ space: viewerSpace }).then(function (source) {
+            hitTestSource = source;
+          });
+        });
+        hitTestSourceRequested = true;
+      }
+
+      // Hit testing
+      if (hitTestSource) {
+        const hitTestResults = frame.getHitTestResults(hitTestSource);
+        if (hitTestResults.length) {
+          const hit = hitTestResults[0];
+          const pose = hit.getPose(referenceSpace);
+
+          reticle.visible = true;
+          reticle.matrix.fromArray(pose.transform.matrix);
+          reticleIndicator.classList.add('visible');
+
+          if (!modelPlaced) {
+            arInfo.textContent = 'Floor detected! Tap to place the model';
+          }
+        } else {
+          reticle.visible = false;
+          reticleIndicator.classList.remove('visible');
+          if (!modelPlaced) {
+            arInfo.textContent = 'Scan the floor slowly...';
+          }
+        }
+      }
+
+      arRenderer.render(arScene, arCamera);
+    }
+
+    // Handle tap to place (using named function to prevent duplicates)
+    function handleARTap(event) {
+      if (event.target === arCloseBtn) return;
+
+      if (reticle.visible && modelClone && !modelPlaced) {
+        modelClone.position.setFromMatrixPosition(reticle.matrix);
+        modelClone.quaternion.setFromRotationMatrix(reticle.matrix);
+        arScene.add(modelClone);
+        modelPlaced = true;
+        reticle.visible = false;
+        reticleIndicator.classList.remove('visible');
+        arInfo.textContent = 'Model placed! Move around to view from different angles';
+      }
+    }
+
+    arScreen.addEventListener('click', handleARTap);
+
+    // Exit AR
+    arCloseBtn.onclick = () => {
+      if (arSession) {
+        arSession.end();
+      }
+    };
+
+    function onARSessionEnd() {
+      arScreen.classList.remove('active');
+      hitTestSourceRequested = false;
+      hitTestSource = null;
+      modelPlaced = false;
+      arSession = null;
+
+      if (modelClone && modelClone.parent) {
+        arScene.remove(modelClone);
+      }
+
+      // Stop animation loop
+      arRenderer.setAnimationLoop(null);
+
+      // Reset AR button
+      arBtn.disabled = false;
+      arBtn.textContent = 'View in AR';
+    }
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      if (arCamera && arRenderer) {
+        arCamera.aspect = window.innerWidth / window.innerHeight;
+        arCamera.updateProjectionMatrix();
+        arRenderer.setSize(window.innerWidth, window.innerHeight);
+      }
+    });
+
+    // Initialize app
+    console.log('Initializing app...');
+    console.log('DOM elements check:', {
+      selectionScreen: !!selectionScreen,
+      viewerScreen: !!viewerScreen,
+      arScreen: !!arScreen,
+      modelList: !!modelList,
+      modelViewer: !!modelViewer,
+      backBtn: !!backBtn,
+      arBtn: !!arBtn,
+      arCloseBtn: !!arCloseBtn
+    });
+    scanForModels();
+    console.log('scanForModels() finished');
+  </script>
+
+</body>
+</html>
