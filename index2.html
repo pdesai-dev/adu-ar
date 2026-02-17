@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ADU AR Model Viewer</title>
+
+  <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+
+    /* Model Selection Screen */
+    #selection-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    #selection-screen.hidden {
+      display: none;
+    }
+
+    .title {
+      color: white;
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    .subtitle {
+      color: rgba(255,255,255,0.8);
+      font-size: 16px;
+      margin-bottom: 40px;
+      text-align: center;
+    }
+
+    .model-list {
+      background: white;
+      border-radius: 16px;
+      padding: 20px;
+      width: 100%;
+      max-width: 500px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+
+    .model-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      margin: 8px 0;
+      background: #f8f9fa;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .model-item:hover {
+      background: #e9ecef;
+      transform: translateX(4px);
+    }
+
+    .model-item:active {
+      transform: scale(0.98);
+    }
+
+    .model-name {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .model-arrow {
+      color: #667eea;
+      font-size: 24px;
+    }
+
+    /* Viewer Screen */
+    #viewer-screen {
+      display: none;
+      flex-direction: column;
+      height: 100vh;
+      position: relative;
+    }
+
+    #viewer-screen.active {
+      display: flex;
+    }
+
+    .viewer-header {
+      background: rgba(0,0,0,0.8);
+      color: white;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 10;
+    }
+
+    .back-btn {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .back-btn:active {
+      background: rgba(255,255,255,0.3);
+    }
+
+    .model-title {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    model-viewer {
+      width: 100%;
+      height: 100vh;
+      background: #f0f0f0;
+    }
+
+    .viewer-controls {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      z-index: 10;
+    }
+
+    .control-hint {
+      color: #666;
+      font-size: 14px;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+
+    .ar-info-text {
+      background: #e3f2fd;
+      color: #1976d2;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    .ar-button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 16px 32px;
+      border-radius: 12px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+      transition: all 0.3s ease;
+      width: 100%;
+    }
+
+    .ar-button:active {
+      transform: scale(0.98);
+    }
+
+    model-viewer::part(default-ar-button) {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Model Selection Screen -->
+  <div id="selection-screen">
+    <h1 class="title">ADU AR Viewer</h1>
+    <p class="subtitle">Select a model to view</p>
+
+    <div class="model-list" id="model-list">
+      <!-- Models will be populated here -->
+    </div>
+  </div>
+
+  <!-- 3D Viewer Screen -->
+  <div id="viewer-screen">
+    <div class="viewer-header">
+      <button class="back-btn" id="back-btn">← Back</button>
+      <div class="model-title" id="model-title">Model</div>
+      <div style="width: 60px;"></div>
+    </div>
+
+    <model-viewer
+      id="model-viewer"
+      alt="3D Model"
+      camera-controls
+      auto-rotate
+      shadow-intensity="1"
+      exposure="1"
+      ar
+      ar-modes="webxr scene-viewer quick-look"
+      ar-scale="auto"
+      camera-orbit="45deg 55deg 4m"
+      min-camera-orbit="auto auto 2m"
+      max-camera-orbit="auto auto 10m"
+      interaction-prompt="none">
+
+      <button slot="ar-button" id="custom-ar-button" style="display: none;">View in AR</button>
+    </model-viewer>
+
+    <div class="viewer-controls">
+      <div class="control-hint">
+        Drag to rotate • Pinch to zoom • Two fingers to pan
+      </div>
+      <div class="ar-info-text">
+        📱 <strong>AR Mode Instructions:</strong><br>
+        1. Tap "View in AR" below<br>
+        2. Point camera at the floor and move slowly<br>
+        3. Tap when you see the placement indicator<br>
+        4. Move around to view from different angles
+      </div>
+      <button class="ar-button" id="ar-btn">View in AR</button>
+    </div>
+  </div>
+
+  <script type="module">
+    // App State
+    let currentModel = null;
+    let availableModels = [];
+
+    // Get DOM elements
+    const selectionScreen = document.getElementById('selection-screen');
+    const viewerScreen = document.getElementById('viewer-screen');
+    const modelList = document.getElementById('model-list');
+    const modelViewer = document.getElementById('model-viewer');
+    const backBtn = document.getElementById('back-btn');
+    const arBtn = document.getElementById('ar-btn');
+    const customArButton = document.getElementById('custom-ar-button');
+
+    // Scan for GLB models in directory
+    async function scanForModels() {
+      const models = [
+        { name: 'Model 1', file: 'model1.glb' }
+      ];
+
+      availableModels = models;
+      displayModelList();
+    }
+
+    // Display model list
+    function displayModelList() {
+      modelList.innerHTML = '';
+      availableModels.forEach(model => {
+        const item = document.createElement('div');
+        item.className = 'model-item';
+        item.innerHTML = `
+          <span class="model-name">${model.name}</span>
+          <span class="model-arrow">→</span>
+        `;
+        item.onclick = () => loadModel(model);
+        modelList.appendChild(item);
+      });
+    }
+
+    // Load selected model
+    function loadModel(model) {
+      currentModel = model;
+      document.getElementById('model-title').textContent = model.name;
+      modelViewer.setAttribute('src', model.file);
+
+      selectionScreen.classList.add('hidden');
+      viewerScreen.classList.add('active');
+
+      // Wait for model to load
+      modelViewer.addEventListener('load', () => {
+        console.log('Model loaded successfully');
+      }, { once: true });
+
+      modelViewer.addEventListener('error', (event) => {
+        console.error('Error loading model:', event);
+        alert('Failed to load model. Please check the file.');
+      }, { once: true });
+    }
+
+    // Go back to selection
+    backBtn.onclick = () => {
+      viewerScreen.classList.remove('active');
+      selectionScreen.classList.remove('hidden');
+      modelViewer.removeAttribute('src');
+    };
+
+    // Custom AR button click - triggers model-viewer's built-in AR
+    arBtn.onclick = () => {
+      // Trigger the model-viewer's AR button
+      customArButton.click();
+    };
+
+    // Check if AR is available
+    modelViewer.addEventListener('ar-status', (event) => {
+      if (event.detail.status === 'not-presenting') {
+        console.log('AR available');
+      } else if (event.detail.status === 'failed') {
+        console.error('AR failed:', event.detail);
+        arBtn.textContent = 'AR Not Available';
+        arBtn.disabled = true;
+      }
+    });
+
+    // Listen for AR session events
+    modelViewer.addEventListener('ar-tracking', (event) => {
+      console.log('AR tracking:', event.detail.status);
+    });
+
+    // Initialize app
+    scanForModels();
+  </script>
+
+</body>
+</html>

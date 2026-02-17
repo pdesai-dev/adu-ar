@@ -542,22 +542,36 @@
 
     async function startXRSession() {
       try {
+        console.log('Requesting AR session...');
+
         arSession = await navigator.xr.requestSession('immersive-ar', {
           requiredFeatures: ['hit-test'],
           optionalFeatures: ['dom-overlay'],
           domOverlay: { root: arScreen }
         });
 
+        console.log('AR session created successfully');
+
         await arRenderer.xr.setSession(arSession);
 
         arSession.addEventListener('end', onARSessionEnd);
 
-        arInfo.textContent = 'Slowly scan the floor by moving your device';
+        arInfo.textContent = 'Initializing AR...';
 
         arRenderer.setAnimationLoop(renderAR);
       } catch (err) {
         console.error('Failed to start AR session:', err);
-        arInfo.textContent = 'Failed to start AR: ' + err.message;
+
+        let errorMessage = 'Failed to start AR';
+        if (err.message.includes('reference space')) {
+          errorMessage = 'AR is only available on mobile devices with ARKit or ARCore support. Please open this on your phone.';
+        } else {
+          errorMessage = err.message;
+        }
+
+        arInfo.textContent = errorMessage;
+        alert(errorMessage);
+
         arScreen.classList.remove('active');
         arBtn.disabled = false;
         arBtn.textContent = 'View in AR';
@@ -573,29 +587,46 @@
 
       if (!referenceSpace || !session) return;
 
-      // Setup hit testing
+      // Setup hit testing - proper way for Android Chrome
       if (!hitTestSourceRequested) {
-        session.requestReferenceSpace('viewer').then(function (viewerSpace) {
-          session.requestHitTestSource({ space: viewerSpace }).then(function (source) {
-            hitTestSource = source;
-          });
+        console.log('Setting up hit test source...');
+
+        session.requestReferenceSpace('viewer').then((viewerSpace) => {
+          console.log('Got viewer reference space');
+          return session.requestHitTestSource({ space: viewerSpace });
+        }).then((source) => {
+          hitTestSource = source;
+          console.log('Hit test source created successfully');
+          arInfo.textContent = 'Slowly scan the floor by moving your device';
+        }).catch((err) => {
+          console.error('Hit test setup failed:', err);
+          arInfo.textContent = 'Hit test setup failed: ' + err.message;
         });
+
+        session.addEventListener('end', () => {
+          hitTestSourceRequested = false;
+          hitTestSource = null;
+        });
+
         hitTestSourceRequested = true;
       }
 
       // Hit testing
       if (hitTestSource) {
         const hitTestResults = frame.getHitTestResults(hitTestSource);
-        if (hitTestResults.length) {
+
+        if (hitTestResults && hitTestResults.length > 0) {
           const hit = hitTestResults[0];
           const pose = hit.getPose(referenceSpace);
 
-          reticle.visible = true;
-          reticle.matrix.fromArray(pose.transform.matrix);
-          reticleIndicator.classList.add('visible');
+          if (pose) {
+            reticle.visible = true;
+            reticle.matrix.fromArray(pose.transform.matrix);
+            reticleIndicator.classList.add('visible');
 
-          if (!modelPlaced) {
-            arInfo.textContent = 'Floor detected! Tap to place the model';
+            if (!modelPlaced) {
+              arInfo.textContent = 'Floor detected! Tap to place the model';
+            }
           }
         } else {
           reticle.visible = false;
