@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>ADU Viewer</title>
+
+  <script type="module"
+    src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js">
+  </script>
+
+  <style>
+    body {
+      margin: 0;
+      background: #f2f2f2;
+    }
+
+    model-viewer {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.6);
+      color: white;
+      padding: 10px;
+      font-family: Arial;
+      border-radius: 6px;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+
+<div id="controls">
+  ADU Model Viewer<br>
+  Rotate with finger<br>
+  Pinch to zoom<br>
+  Tap AR when ready
+</div>
+
+<model-viewer
+  src="model.glb"
+  alt="ADU Model"
+  camera-controls
+  auto-rotate
+  shadow-intensity="1"
+  exposure="1"
+  environment-image="neutral"
+  ar
+  ar-modes="webxr scene-viewer quick-look"
+  ar-scale="fixed">
+</model-viewer>
+
+</body>
+</html>
