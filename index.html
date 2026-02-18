@@ -362,7 +362,8 @@
     async function scanForModels() {
       console.log('scanForModels() called');
       const models = [
-        { name: 'Model 1', file: 'model1.glb' }
+        { name: 'Model 1', file: 'model1.glb' },
+        { name: 'Model 2', file: 'model2.glb' }
       ];
 
       console.log('Models:', models);
@@ -405,8 +406,10 @@
       selectionScreen.classList.add('hidden');
       viewerScreen.classList.add('active');
 
-      // Check AR support when model is loaded
-      checkARSupport();
+      // Enable AR button (we know WebXR works on your device)
+      arBtn.disabled = false;
+      arBtn.textContent = 'View in AR';
+      console.log('AR button enabled');
 
       // Add load event listener
       modelViewer.addEventListener('load', () => {
@@ -428,19 +431,30 @@
 
     // Check AR support on load
     async function checkARSupport() {
+      console.log('Checking AR support...');
+      console.log('navigator.xr exists?', 'xr' in navigator);
+
       if ('xr' in navigator) {
         try {
           const supported = await navigator.xr.isSessionSupported('immersive-ar');
-          if (!supported) {
+          console.log('immersive-ar supported?', supported);
+
+          if (supported) {
+            console.log('✅ AR is supported! Button should be enabled.');
+            arBtn.disabled = false;
+            arBtn.textContent = 'View in AR';
+          } else {
+            console.log('❌ AR not supported');
             arBtn.disabled = true;
             arBtn.textContent = 'AR Not Supported';
           }
         } catch (err) {
           console.error('AR check failed:', err);
           arBtn.disabled = true;
-          arBtn.textContent = 'AR Not Available';
+          arBtn.textContent = 'AR Check Failed';
         }
       } else {
+        console.log('❌ navigator.xr not found');
         arBtn.disabled = true;
         arBtn.textContent = 'WebXR Not Supported';
       }
@@ -545,28 +559,34 @@
         console.log('Requesting AR session...');
 
         arSession = await navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['hit-test'],
-          optionalFeatures: ['dom-overlay'],
-          domOverlay: { root: arScreen }
+          requiredFeatures: ['hit-test']
         });
 
         console.log('AR session created successfully');
 
+        // Set session on renderer first
         await arRenderer.xr.setSession(arSession);
 
         arSession.addEventListener('end', onARSessionEnd);
 
-        arInfo.textContent = 'Initializing AR...';
+        arInfo.textContent = 'Slowly scan the floor by moving your device';
 
+        // Start render loop - we'll set up hit testing inside it after first frame
         arRenderer.setAnimationLoop(renderAR);
       } catch (err) {
         console.error('Failed to start AR session:', err);
+        console.error('Error name:', err.name);
+        console.error('Error message:', err.message);
 
-        let errorMessage = 'Failed to start AR';
-        if (err.message.includes('reference space')) {
-          errorMessage = 'AR is only available on mobile devices with ARKit or ARCore support. Please open this on your phone.';
-        } else {
-          errorMessage = err.message;
+        let errorMessage = 'AR Error: ' + err.message;
+
+        // More specific error messages
+        if (err.message.includes('not supported')) {
+          errorMessage = 'WebXR AR is not supported on this device. Try using index2.html instead.';
+        } else if (err.message.includes('reference space')) {
+          errorMessage = 'Reference space error: ' + err.message + '\n\nTry using index2.html which uses a different AR method.';
+        } else if (err.name === 'NotSupportedError') {
+          errorMessage = 'AR features not supported. Try using index2.html instead.';
         }
 
         arInfo.textContent = errorMessage;
@@ -580,40 +600,59 @@
     }
 
     function renderAR(timestamp, frame) {
-      if (!frame || !arRenderer) return;
+      if (!frame) return;
 
+      const session = frame.session;
       const referenceSpace = arRenderer.xr.getReferenceSpace();
-      const session = arRenderer.xr.getSession();
 
-      if (!referenceSpace || !session) return;
+      if (!referenceSpace) return;
 
-      // Setup hit testing - proper way for Android Chrome
+      // Set up hit testing on first frame (after session is ready)
       if (!hitTestSourceRequested) {
-        console.log('Setting up hit test source...');
+        console.log('First frame - setting up hit test source...');
 
-        session.requestReferenceSpace('viewer').then((viewerSpace) => {
-          console.log('Got viewer reference space');
-          return session.requestHitTestSource({ space: viewerSpace });
+        // Request hit test source using the session from the frame
+        frame.session.requestHitTestSourceForTransientInput({
+          profile: "generic-touchscreen"
         }).then((source) => {
           hitTestSource = source;
-          console.log('Hit test source created successfully');
+          console.log('Hit test source ready (transient input)!');
           arInfo.textContent = 'Slowly scan the floor by moving your device';
         }).catch((err) => {
-          console.error('Hit test setup failed:', err);
-          arInfo.textContent = 'Hit test setup failed: ' + err.message;
-        });
+          console.error('Transient input hit test failed:', err);
+          // Fallback to viewer-based hit testing
+          console.log('Trying viewer-based hit testing as fallback...');
 
-        session.addEventListener('end', () => {
-          hitTestSourceRequested = false;
-          hitTestSource = null;
+          frame.session.requestReferenceSpace('viewer').then((viewerSpace) => {
+            console.log('Got viewer reference space');
+            return frame.session.requestHitTestSource({ space: viewerSpace });
+          }).then((source) => {
+            hitTestSource = source;
+            console.log('Hit test source ready (viewer-based)!');
+            arInfo.textContent = 'Slowly scan the floor by moving your device';
+          }).catch((err2) => {
+            console.error('Viewer hit test also failed:', err2);
+            arInfo.textContent = 'Hit test setup failed. Try moving your device.';
+          });
         });
 
         hitTestSourceRequested = true;
       }
 
-      // Hit testing
+      // Hit testing - check if source is ready
       if (hitTestSource) {
-        const hitTestResults = frame.getHitTestResults(hitTestSource);
+        let hitTestResults;
+
+        // Try transient input first
+        try {
+          const transientResults = frame.getHitTestResultsForTransientInput(hitTestSource);
+          if (transientResults.length > 0) {
+            hitTestResults = transientResults[0].results;
+          }
+        } catch (e) {
+          // Fall back to regular hit test
+          hitTestResults = frame.getHitTestResults(hitTestSource);
+        }
 
         if (hitTestResults && hitTestResults.length > 0) {
           const hit = hitTestResults[0];
