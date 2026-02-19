@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ADU AR Placer</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    }
+
+    #container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+
+    /* Model Selection Overlay */
+    #model-selection {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+
+    #model-selection.hidden {
+      display: none;
+    }
+
+    .title {
+      color: white;
+      font-size: 28px;
+      font-weight: bold;
+      margin-bottom: 30px;
+    }
+
+    .model-grid {
+      display: grid;
+      gap: 16px;
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .model-card {
+      background: white;
+      padding: 20px;
+      border-radius: 16px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 18px;
+      font-weight: 600;
+      transition: transform 0.2s;
+    }
+
+    .model-card:active {
+      transform: scale(0.98);
+    }
+
+    /* AR UI */
+    #ar-ui {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #ar-ui.hidden {
+      display: none;
+    }
+
+    /* Info Banner */
+    #info-banner {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.85);
+      color: white;
+      padding: 16px 24px;
+      border-radius: 12px;
+      font-size: 15px;
+      max-width: 80%;
+      text-align: center;
+      line-height: 1.4;
+    }
+
+    /* Rotation Controls */
+    #rotation-controls {
+      position: absolute;
+      bottom: 140px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.85);
+      padding: 16px 24px;
+      border-radius: 16px;
+      pointer-events: auto;
+    }
+
+    #rotation-controls.hidden {
+      display: none;
+    }
+
+    .rotate-btn {
+      width: 50px;
+      height: 50px;
+      background: white;
+      border: none;
+      border-radius: 50%;
+      font-size: 24px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.1s;
+    }
+
+    .rotate-btn:active {
+      transform: scale(0.9);
+    }
+
+    #rotation-angle {
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      min-width: 50px;
+      text-align: center;
+    }
+
+    /* Place Button */
+    #place-button {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 18px 48px;
+      font-size: 18px;
+      font-weight: bold;
+      background: linear-gradient(135deg, #00ff88 0%, #00cc66 100%);
+      color: white;
+      border: none;
+      border-radius: 16px;
+      cursor: pointer;
+      pointer-events: auto;
+      box-shadow: 0 4px 20px rgba(0, 255, 136, 0.4);
+      transition: transform 0.1s;
+    }
+
+    #place-button:active {
+      transform: translateX(-50%) scale(0.95);
+    }
+
+    #place-button.hidden {
+      display: none;
+    }
+
+    /* Exit Button */
+    #exit-button {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      font-size: 14px;
+      font-weight: bold;
+      background: rgba(0, 0, 0, 0.85);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+
+    /* Start AR Button */
+    #start-ar-button {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 18px 48px;
+      font-size: 18px;
+      font-weight: bold;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 16px;
+      cursor: pointer;
+      pointer-events: auto;
+      box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    #start-ar-button.hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <!-- Model Selection -->
+  <div id="model-selection">
+    <div class="title">Select a Model</div>
+    <div class="model-grid" id="model-grid"></div>
+  </div>
+
+  <!-- AR UI -->
+  <div id="ar-ui" class="hidden">
+    <div id="info-banner">Point at the floor and move slowly</div>
+
+    <div id="rotation-controls" class="hidden">
+      <button class="rotate-btn" id="rotate-left">↺</button>
+      <div id="rotation-angle">0°</div>
+      <button class="rotate-btn" id="rotate-right">↻</button>
+    </div>
+
+    <button id="place-button" class="hidden">Place Model</button>
+    <button id="start-ar-button" class="hidden">Start AR</button>
+    <button id="exit-button">Exit AR</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
+    import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
+
+    // Configuration
+    const MODELS = [
+      { name: 'Model 1', file: 'model1.glb' },
+      { name: 'Model 2', file: 'model2.glb' }
+    ];
+
+    // DOM Elements
+    const modelSelection = document.getElementById('model-selection');
+    const modelGrid = document.getElementById('model-grid');
+    const arUI = document.getElementById('ar-ui');
+    const infoBanner = document.getElementById('info-banner');
+    const rotationControls = document.getElementById('rotation-controls');
+    const rotationAngle = document.getElementById('rotation-angle');
+    const placeButton = document.getElementById('place-button');
+    const startArButton = document.getElementById('start-ar-button');
+    const exitButton = document.getElementById('exit-button');
+    const canvas = document.getElementById('canvas');
+
+    // Three.js objects
+    let scene, camera, renderer;
+    let reticle, model, modelPreview;
+    let xrSession = null;
+    let hitTestSource = null;
+    let hitTestSourceRequested = false;
+
+    // State
+    let selectedModelFile = null;
+    let currentRotation = 0;
+    let modelPlaced = false;
+
+    // Initialize
+    init();
+
+    function init() {
+      // Setup Three.js scene
+      scene = new THREE.Scene();
+
+      camera = new THREE.PerspectiveCamera(
+        70,
+        window.innerWidth / window.innerHeight,
+        0.01,
+        20
+      );
+
+      renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        alpha: true,
+        antialias: true
+      });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+
+      // Lighting
+      const ambientLight = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+      scene.add(ambientLight);
+
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.3);
+      directionalLight.position.set(10, 15, 10);
+      scene.add(directionalLight);
+
+      // Create reticle (floor indicator)
+      const reticleGeometry = new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2);
+      const reticleMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+      reticle = new THREE.Mesh(reticleGeometry, reticleMaterial);
+      reticle.matrixAutoUpdate = false;
+      reticle.visible = false;
+      scene.add(reticle);
+
+      // Populate model selection
+      MODELS.forEach(modelData => {
+        const card = document.createElement('div');
+        card.className = 'model-card';
+        card.innerHTML = `<span>${modelData.name}</span><span>→</span>`;
+        card.onclick = () => selectModel(modelData.file);
+        modelGrid.appendChild(card);
+      });
+
+      // Event listeners
+      startArButton.onclick = startARSession;
+      exitButton.onclick = endARSession;
+      placeButton.onclick = placeModel;
+      document.getElementById('rotate-left').onclick = () => rotateModel(-15);
+      document.getElementById('rotate-right').onclick = () => rotateModel(15);
+
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    function selectModel(file) {
+      selectedModelFile = file;
+      modelSelection.classList.add('hidden');
+      startArButton.classList.remove('hidden');
+      arUI.classList.remove('hidden');
+      infoBanner.textContent = 'Tap "Start AR" to begin';
+    }
+
+    async function startARSession() {
+      if (!selectedModelFile) return;
+
+      try {
+        infoBanner.textContent = 'Starting AR...';
+
+        // Request AR session
+        xrSession = await navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['hit-test'],
+          optionalFeatures: ['dom-overlay'],
+          domOverlay: { root: document.body }
+        });
+
+        console.log('✅ AR session started');
+
+        // Setup session
+        xrSession.addEventListener('end', onSessionEnded);
+
+        await renderer.xr.setSession(xrSession);
+
+        startArButton.classList.add('hidden');
+
+        // Load model
+        await loadModel(selectedModelFile);
+
+        infoBanner.textContent = 'Point at the floor and move slowly';
+
+        // Start render loop
+        renderer.setAnimationLoop(render);
+
+      } catch (error) {
+        console.error('❌ AR session failed:', error);
+        infoBanner.textContent = 'AR failed: ' + error.message;
+        startArButton.classList.remove('hidden');
+      }
+    }
+
+    async function loadModel(file) {
+      return new Promise((resolve, reject) => {
+        const loader = new GLTFLoader();
+
+        loader.load(
+          file,
+          (gltf) => {
+            model = gltf.scene;
+
+            // Scale model appropriately
+            const box = new THREE.Box3().setFromObject(model);
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const targetSize = 1.5; // meters
+            const scale = targetSize / maxDim;
+            model.scale.set(scale, scale, scale);
+
+            // Create preview (semi-transparent)
+            modelPreview = model.clone();
+            modelPreview.traverse((child) => {
+              if (child.isMesh) {
+                child.material = child.material.clone();
+                child.material.transparent = true;
+                child.material.opacity = 0.6;
+              }
+            });
+
+            console.log('✅ Model loaded');
+            resolve();
+          },
+          undefined,
+          (error) => {
+            console.error('❌ Model load failed:', error);
+            reject(error);
+          }
+        );
+      });
+    }
+
+    function render(timestamp, frame) {
+      if (!frame) return;
+
+      const session = frame.session;
+      const referenceSpace = renderer.xr.getReferenceSpace();
+
+      if (!referenceSpace) return;
+
+      // Setup hit test source on first frame
+      if (!hitTestSourceRequested) {
+        session.requestReferenceSpace('viewer').then((viewerSpace) => {
+          session.requestHitTestSource({ space: viewerSpace })
+            .then((source) => {
+              hitTestSource = source;
+              console.log('✅ Hit test ready');
+            })
+            .catch((err) => {
+              console.error('❌ Hit test failed:', err);
+              infoBanner.textContent = 'Hit test unavailable: ' + err.message;
+            });
+        });
+        hitTestSourceRequested = true;
+      }
+
+      // Perform hit testing
+      if (hitTestSource && !modelPlaced) {
+        const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+        if (hitTestResults.length > 0) {
+          const hit = hitTestResults[0];
+          const pose = hit.getPose(referenceSpace);
+
+          if (pose) {
+            // Update reticle position
+            reticle.visible = true;
+            reticle.matrix.fromArray(pose.transform.matrix);
+
+            // Update model preview position and rotation
+            if (modelPreview && !modelPreview.parent) {
+              scene.add(modelPreview);
+              rotationControls.classList.remove('hidden');
+              placeButton.classList.remove('hidden');
+              infoBanner.textContent = 'Rotate model, then tap "Place Model"';
+            }
+
+            if (modelPreview && modelPreview.parent) {
+              modelPreview.position.setFromMatrixPosition(reticle.matrix);
+              modelPreview.rotation.y = THREE.MathUtils.degToRad(currentRotation);
+            }
+          }
+        } else {
+          reticle.visible = false;
+          if (modelPreview && modelPreview.parent && !modelPlaced) {
+            scene.remove(modelPreview);
+            rotationControls.classList.add('hidden');
+            placeButton.classList.add('hidden');
+            infoBanner.textContent = 'Scan the floor slowly...';
+          }
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    function rotateModel(degrees) {
+      currentRotation = (currentRotation + degrees) % 360;
+      if (currentRotation < 0) currentRotation += 360;
+      rotationAngle.textContent = currentRotation + '°';
+
+      if (modelPreview) {
+        modelPreview.rotation.y = THREE.MathUtils.degToRad(currentRotation);
+      }
+    }
+
+    function placeModel() {
+      if (!modelPreview || !modelPreview.parent) return;
+
+      // Remove preview
+      scene.remove(modelPreview);
+
+      // Add actual model at same position and rotation
+      model.position.copy(modelPreview.position);
+      model.rotation.copy(modelPreview.rotation);
+      scene.add(model);
+
+      // Hide controls
+      reticle.visible = false;
+      rotationControls.classList.add('hidden');
+      placeButton.classList.add('hidden');
+
+      modelPlaced = true;
+      infoBanner.textContent = '✅ Model placed! Walk around to view';
+
+      console.log('✅ Model placed at rotation:', currentRotation + '°');
+    }
+
+    function endARSession() {
+      if (xrSession) {
+        xrSession.end();
+      }
+    }
+
+    function onSessionEnded() {
+      console.log('AR session ended');
+
+      hitTestSource = null;
+      hitTestSourceRequested = false;
+      modelPlaced = false;
+      currentRotation = 0;
+
+      if (modelPreview && modelPreview.parent) {
+        scene.remove(modelPreview);
+      }
+      if (model && model.parent) {
+        scene.remove(model);
+      }
+
+      rotationControls.classList.add('hidden');
+      placeButton.classList.add('hidden');
+      startArButton.classList.remove('hidden');
+
+      infoBanner.textContent = 'AR session ended. Tap "Start AR" to try again.';
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+  </script>
+</body>
+</html>
